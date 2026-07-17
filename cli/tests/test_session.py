@@ -58,3 +58,46 @@ def test_rejected_refresh_is_cleared(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(session.httpx, "post", lambda *a, **k: FakeResponse(401))
     assert session.resolve_access_token(_config()) is None
     assert cleared == [True]
+
+
+class FakeDeviceClient:
+    """Stand-in for httpx.Client covering the two device-flow POSTs."""
+
+    def __init__(self, *_a: Any, **_k: Any) -> None:
+        pass
+
+    def __enter__(self) -> FakeDeviceClient:
+        return self
+
+    def __exit__(self, *_a: Any) -> bool:
+        return False
+
+    def post(self, path: str, json: dict[str, Any] | None = None) -> FakeResponse:
+        if path == "/auth/device/code":
+            return FakeResponse(
+                200,
+                {
+                    "device_code": "dev",
+                    "user_code": "USER-CODE",
+                    "verification_uri": "https://github.com/login/device",
+                    "interval": 0,
+                    "expires_in": 900,
+                },
+            )
+        return FakeResponse(200, {"refresh_token": "RT"})
+
+
+def test_device_login_persists_api_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    persisted: list[str] = []
+    monkeypatch.setattr(session, "save_refresh_token", lambda _t: None)
+    monkeypatch.setattr(session, "save_api_url", lambda url: persisted.append(url))
+    monkeypatch.setattr(session.click, "launch", lambda *_a, **_k: 0)
+    monkeypatch.setattr(session.click, "echo", lambda *_a, **_k: None)
+    monkeypatch.setattr(session.time, "sleep", lambda *_a: None)
+    monkeypatch.setattr(session.httpx, "Client", FakeDeviceClient)
+
+    session.device_login(Config(api_url="https://prod.example", token=None))
+
+    assert persisted == [
+        "https://prod.example"
+    ]  # login records the endpoint as default

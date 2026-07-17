@@ -12,7 +12,7 @@ import click
 import httpx
 
 from pastry_cli.auth import clear_refresh_token, load_refresh_token, save_refresh_token
-from pastry_cli.config import Config
+from pastry_cli.config import Config, save_api_url
 
 
 class LoginError(Exception):
@@ -74,6 +74,9 @@ def device_login(config: Config) -> None:
             )
             if resp.status_code == 200:
                 save_refresh_token(resp.json()["refresh_token"])
+                save_api_url(
+                    config.api_url
+                )  # make this endpoint the default for next time
                 return
             if resp.status_code == 428:  # authorization_pending
                 continue

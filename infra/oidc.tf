@@ -22,7 +22,14 @@ data "aws_iam_policy_document" "github_assume" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repo}:*"]
+      # GitHub now embeds immutable numeric IDs in the OIDC subject by default
+      # (repo:<owner>@<owner_id>/<repo>@<repo_id>:...). Match that form — wildcarding the
+      # IDs keeps trust pinned to the owner login + repo name — plus the legacy plain form
+      # in case the subject format changes back.
+      values = [
+        "repo:${var.github_repo}:*",
+        "repo:${split("/", var.github_repo)[0]}@*/${split("/", var.github_repo)[1]}@*:*",
+      ]
     }
   }
 }
@@ -48,6 +55,8 @@ data "aws_iam_policy_document" "github_deploy" {
       "iam:PassRole",
       "iam:CreateRole",
       "iam:DeleteRole",
+      "iam:UpdateAssumeRolePolicy", # lets CI manage the OIDC role's own trust policy
+
       "iam:AttachRolePolicy",
       "iam:DetachRolePolicy",
       "iam:PutRolePolicy",

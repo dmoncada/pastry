@@ -1,0 +1,68 @@
+# uv workspace root for the Python side of Pastry (backend + cli + shared).
+# Frontend (npm/Vite) and infra (OpenTofu) live outside this workspace.
+[project]
+name = "pastry-workspace"
+version = "0"
+description = "Pastry monorepo — Python workspace root (not a distributable package)"
+requires-python = ">=3.12"
+
+[tool.uv]
+package = false
+# Sync these groups by default, so a bare `uv sync` installs the full workspace
+# (every member + its runtime deps) instead of pruning to just the root + dev.
+# This makes `uv sync` equivalent to `uv sync --all-packages`.
+default-groups = ["dev", "workspace"]
+
+[tool.uv.workspace]
+members = [
+    "api",
+    "cli",
+    "shared"
+]
+
+[tool.uv.sources]
+pastry-api = { workspace = true }
+pastry-cli = { workspace = true }
+pastry-shared = { workspace = true }
+
+[dependency-groups]
+# Shared dev tooling across all members.
+dev = [
+    "boto3-stubs[dynamodb]>=1.35",
+    "httpx>=0.27",
+    "moto[dynamodb]>=5",
+    "pytest>=8",
+    "ruff>=0.6",
+    "ty>=0.0.60",
+    "types-pyperclip>=1.9",
+]
+
+# The workspace members themselves (editable). Kept in a default group so the
+# IDE's venv always resolves fastapi/mangum/etc. that the members depend on.
+workspace = [
+    "pastry-api",
+    "pastry-cli",
+    "pastry-shared",
+]
+
+[tool.pytest.ini_options]
+testpaths = [
+    "api/tests",
+    "cli/tests",
+]
+filterwarnings = [
+    # short signing keys are test-only; real keys come from SSM/Secrets Manager
+    "ignore:The HMAC key is:UserWarning",
+    # starlette's own TestClient/httpx deprecation, not our code
+    "ignore:Using .httpx. with .starlette.testclient.",
+]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["I", "F401"]
+
+[tool.ty.environment]
+python-version = "3.12"
+python = "./.venv"

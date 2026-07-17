@@ -1,0 +1,85 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync
+      - run: uv run ruff check .
+      - run: uv run ruff format --check api cli shared
+      - run: uv run pytest
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - working-directory: web
+        run: npm ci && npm run lint && npm run build && npm test -- --run
+
+  deploy:
+    needs: [python, web]
+    runs-on: ubuntu-latest
+    env:
+      TF_VAR_jwt_signing_key: ${{ secrets.PASTRY_JWT_SIGNING_KEY }}
+      TF_VAR_github_oauth_client_id: ${{ vars.GH_OAUTH_CLIENT_ID }}
+      TF_VAR_github_oauth_client_secret: ${{ secrets.GH_OAUTH_CLIENT_SECRET }}
+      TF_VAR_github_repo: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Package Lambda
+        run: bash scripts/build-lambda.sh
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: opentofu/setup-opentofu@v1
+      - name: tofu init
+        run: |
+          tofu -chdir=infra init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=pastry/main.tfstate" \
+            -backend-config="region=${{ vars.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_STATE_LOCK_TABLE }}" \
+            -backend-config="encrypt=true"
+
+      - name: tofu apply
+        run: tofu -chdir=infra apply -auto-approve -no-color
+
+      - name: Read outputs
+        id: tf
+        run: |
+          echo "api_url=$(tofu -chdir=infra output -raw api_url)" >> "$GITHUB_OUTPUT"
+          echo "bucket=$(tofu -chdir=infra output -raw frontend_bucket)" >> "$GITHUB_OUTPUT"
+          echo "dist_id=$(tofu -chdir=infra output -raw cloudfront_distribution_id)" >> "$GITHUB_OUTPUT"
+
+      - name: Build frontend
+        working-directory: web
+        env:
+          VITE_API_URL: ${{ steps.tf.outputs.api_url }}
+        run: npm ci && npm run build
+
+      - name: Sync to S3 + invalidate CloudFront
+        run: |
+          aws s3 sync web/dist "s3://${{ steps.tf.outputs.bucket }}" --delete
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ steps.tf.outputs.dist_id }}" --paths "/*"

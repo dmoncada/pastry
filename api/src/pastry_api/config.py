@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     table_name: str = "pastry"
     # None -> use the real AWS endpoint; set to http://localhost:8000 for dynamodb-local.
     ddb_endpoint: str | None = None
-    aws_region: str = "us-east-1"
+    aws_region: str = "us-west-2"
 
     # Browser origins allowed to call the API (the web app). Prod adds the CloudFront domain.
     # From env, provide as JSON, e.g. PASTRY_CORS_ORIGINS='["https://pastry.example.com"]'.

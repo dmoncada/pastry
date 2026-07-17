@@ -10,7 +10,7 @@ from collections.abc import Iterator
 
 os.environ.setdefault("AWS_ACCESS_KEY_ID", "testing")
 os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
-os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
+os.environ.setdefault("AWS_DEFAULT_REGION", "us-west-2")
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

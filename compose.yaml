@@ -21,7 +21,7 @@ services:
       PASTRY_TABLE_NAME: pastry
       AWS_ACCESS_KEY_ID: local
       AWS_SECRET_ACCESS_KEY: local
-      AWS_DEFAULT_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-west-2
     command: ["python", "-m", "pastry_api.scripts.create_table"]
     restart: "no"
 
@@ -47,9 +47,17 @@ services:
       GITHUB_OAUTH_CLIENT_SECRET: ${GITHUB_OAUTH_CLIENT_SECRET:-}
       AWS_ACCESS_KEY_ID: local
       AWS_SECRET_ACCESS_KEY: local
-      AWS_DEFAULT_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-west-2
     command:
-      ["uvicorn", "pastry_api.main:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
+      [
+        "uvicorn",
+        "pastry_api.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8080",
+        "--reload",
+      ]
 
   web:
     image: node:24-alpine

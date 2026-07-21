@@ -7,7 +7,7 @@ USER#<github_id>    REFRESH#<jti>  token_hash, expires_at, ttl
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, cast
 
 from pastry_shared.models import User
@@ -39,7 +39,7 @@ def get_user(github_id: str) -> User | None:
 def upsert_user(github_id: str, login: str, name: str | None) -> User:
     """Create or update a profile, preserving the original ``created_at``."""
     existing = get_user(github_id)
-    created_at = existing.created_at if existing else datetime.now(timezone.utc)
+    created_at = existing.created_at if existing else datetime.now(UTC)
     item: Item = {
         "PK": user_pk(github_id),
         "SK": _PROFILE_SK,

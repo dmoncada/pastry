@@ -1,7 +1,9 @@
-"""Auth tests: token lifecycle (unit + service) and endpoints with a faked GitHub.
+"""Auth integration tests: refresh-token rotation/revocation against the moto table, plus
+the auth endpoints with a faked GitHub.
 
 No network or real OAuth app — the GitHub client is overridden via FastAPI dependency
-injection, and the JWT/refresh logic runs against the moto-mocked table."""
+injection, and the JWT/refresh logic runs against the moto-mocked table. The pure
+token-crypto unit tests live in unit/test_auth_tokens.py."""
 
 from __future__ import annotations
 
@@ -16,6 +18,8 @@ from pastry_api.github import GitHubError
 from pastry_api.main import app
 from pastry_api.routers.auth import get_github_client
 from pastry_api.security import InvalidToken, create_access_token, decode_access_token
+
+pytestmark = pytest.mark.integration
 
 
 class FakeGitHub:
@@ -66,19 +70,7 @@ def github() -> FakeGitHub:
     return fake
 
 
-# --- token lifecycle (service level) -------------------------------------------------
-
-
-def test_access_token_roundtrip() -> None:
-    settings = Settings(jwt_signing_key="k")
-    token = create_access_token("42", settings)
-    assert decode_access_token(token, settings) == "42"
-
-
-def test_decode_rejects_wrong_key() -> None:
-    token = create_access_token("42", Settings(jwt_signing_key="right"))
-    with pytest.raises(InvalidToken):
-        decode_access_token(token, Settings(jwt_signing_key="wrong"))
+# --- refresh-token lifecycle (service level, moto-backed) ----------------------------
 
 
 def test_rotate_invalidates_old_refresh(table: None) -> None:

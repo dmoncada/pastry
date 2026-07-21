@@ -3,16 +3,18 @@ expiry filtering and cross-owner access control."""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from pastry_api import repository
 from pastry_api.db import get_table, paste_sk, slug_gsi1pk, user_pk
 
+pytestmark = pytest.mark.integration
+
 
 def _put_expired(owner: str, slug: str) -> None:
     """Insert a paste whose expires_at is already in the past (TTL not yet swept)."""
-    past = datetime.now(timezone.utc) - timedelta(hours=1)
+    past = datetime.now(UTC) - timedelta(hours=1)
     get_table().put_item(
         Item={
             "PK": user_pk(owner),
@@ -63,7 +65,7 @@ def test_list_is_scoped_to_owner(table: None) -> None:
 
 
 def _put_at_ksuid(owner: str, slug: str, ksuid: str) -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     get_table().put_item(
         Item={
             "PK": user_pk(owner),

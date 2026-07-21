@@ -25,7 +25,7 @@ services:
     command: ["python", "-m", "pastry_api.scripts.create_table"]
     restart: "no"
 
-  backend:
+  api:
     build:
       context: .
       dockerfile: api/Dockerfile.dev
@@ -63,7 +63,7 @@ services:
     image: node:24-alpine
     working_dir: /app
     depends_on:
-      - backend
+      - api
     ports:
       - "5173:5173"
     environment:

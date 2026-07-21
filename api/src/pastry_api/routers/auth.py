@@ -65,7 +65,7 @@ def github_callback(
         gh_token = github.exchange_code(code)
         profile = github.fetch_user(gh_token)
     except GitHubError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     return _authenticate(profile, settings)
 
 
@@ -75,7 +75,7 @@ def device_code(github: GitHub) -> DeviceAuthResponse:
     try:
         return DeviceAuthResponse(**github.start_device_flow())
     except GitHubError as exc:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc))
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
 
 
 @router.post("/device/token")
@@ -91,7 +91,7 @@ def device_token(
             )
         profile = github.fetch_user(gh_token)
     except GitHubError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     return _authenticate(profile, settings)
 
 
@@ -100,8 +100,10 @@ def refresh(body: RefreshRequest, settings: Config) -> TokenPair:
     """Rotate the refresh token (single-use) and mint a fresh access JWT."""
     try:
         return auth_service.rotate_refresh(body.refresh_token, settings)
-    except InvalidToken:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid refresh token")
+    except InvalidToken as exc:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "invalid refresh token"
+        ) from exc
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

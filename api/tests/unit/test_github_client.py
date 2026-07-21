@@ -15,6 +15,8 @@ import pytest
 from pastry_api.config import Settings
 from pastry_api.github import GitHubClient, GitHubError
 
+pytestmark = pytest.mark.unit
+
 
 @pytest.fixture
 def client() -> GitHubClient:

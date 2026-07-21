@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
+
+pytestmark = pytest.mark.integration
 
 
 def test_create_returns_slug_and_metadata(client: TestClient) -> None:
     resp = client.post("/pastes", json={"content": "hello world"})
     assert resp.status_code == 201
+
     body = resp.json()
     assert body["content"] == "hello world"
     assert body["size"] == len("hello world")
@@ -37,14 +41,12 @@ def test_list_returns_all_created(client: TestClient) -> None:
     # not order. Deterministic ordering is covered in test_repository.py.
     first = client.post("/pastes", json={"content": "one"}).json()["slug"]
     second = client.post("/pastes", json={"content": "two"}).json()["slug"]
-
     slugs = {p["slug"] for p in client.get("/pastes").json()}
     assert slugs == {first, second}
 
 
 def test_edit_updates_content_and_size(client: TestClient) -> None:
     slug = client.post("/pastes", json={"content": "before"}).json()["slug"]
-
     resp = client.patch(f"/p/{slug}", json={"content": "after!"})
     assert resp.status_code == 200
     assert resp.json()["content"] == "after!"
@@ -54,7 +56,6 @@ def test_edit_updates_content_and_size(client: TestClient) -> None:
 
 def test_delete_then_404(client: TestClient) -> None:
     slug = client.post("/pastes", json={"content": "temporary"}).json()["slug"]
-
     assert client.delete(f"/p/{slug}").status_code == 204
     assert client.get(f"/p/{slug}").status_code == 404
     assert client.delete(f"/p/{slug}").status_code == 404

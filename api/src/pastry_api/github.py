@@ -6,12 +6,17 @@ fake — no network, no real OAuth app needed to exercise the endpoints.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Protocol
 from urllib.parse import urlencode
 
 import httpx
 
 from pastry_api.config import Settings
+
+# On Lambda there is no console to watch, so a failed OAuth exchange leaves no trace
+# beyond the 4xx the caller sees. These are the only calls that depend on a third party.
+logger = logging.getLogger(__name__)
 
 _AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
 _ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token"
@@ -112,16 +117,26 @@ def _parse(resp: httpx.Response) -> dict[str, Any]:
     an httpx exception (which the routes would turn into an opaque 500).
     """
     if resp.is_error:
+        # Body deliberately not logged: token endpoints echo back credentials.
+        logger.warning(
+            "GitHub returned %s for %s", resp.status_code, resp.request.url.path
+        )
         raise GitHubError(
             f"GitHub returned {resp.status_code} for {resp.request.url.path}"
         )
     try:
         body: Any = resp.json()
     except ValueError as exc:
+        logger.warning("GitHub sent a non-JSON body for %s", resp.request.url.path)
         raise GitHubError(
             f"GitHub sent a non-JSON response for {resp.request.url.path}"
         ) from exc
     if not isinstance(body, dict):
+        logger.warning(
+            "GitHub sent a %s, expected an object, for %s",
+            type(body).__name__,
+            resp.request.url.path,
+        )
         raise GitHubError(
             f"GitHub sent an unexpected response for {resp.request.url.path}"
         )

@@ -5,7 +5,7 @@ rotated-away token is rejected. Logout simply deletes the row."""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from pastry_shared.models import TokenPair
 
@@ -21,7 +21,7 @@ from pastry_api.security import (
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def issue_tokens(github_id: str, settings: Settings) -> TokenPair:

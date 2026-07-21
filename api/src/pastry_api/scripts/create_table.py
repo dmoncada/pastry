@@ -41,7 +41,7 @@ def create_table() -> None:
             ],
         )
         print(f"created table {settings.table_name!r}")
-        # TODO: dynamodb-local ignores enable_time_to_live; real TTL is set via OpenTofu.
+        # Note: dynamodb-local ignores TTL config; real TTL is provisioned via OpenTofu.
     except ClientError as exc:
         if exc.response["Error"]["Code"] == "ResourceInUseException":
             print(f"table {settings.table_name!r} already exists")

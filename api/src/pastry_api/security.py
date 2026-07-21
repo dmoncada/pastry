@@ -43,7 +43,9 @@ def decode_access_token(token: str, settings: Settings) -> str:
         raise InvalidToken(str(exc)) from exc
     if payload.get("type") != "access":
         raise InvalidToken("not an access token")
-    return str(payload["sub"])
+    if not (sub := payload.get("sub")):
+        raise InvalidToken("token has no subject")
+    return str(sub)
 
 
 def hash_token(raw: str) -> str:

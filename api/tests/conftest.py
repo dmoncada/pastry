@@ -12,17 +12,18 @@ os.environ.setdefault("AWS_ACCESS_KEY_ID", "testing")
 os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
 os.environ.setdefault("AWS_DEFAULT_REGION", "us-west-2")
 
-import pytest  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-from moto import mock_aws  # noqa: E402
+import pytest
+from fastapi.testclient import TestClient
+from moto import mock_aws
 
 
 @pytest.fixture
 def table() -> Iterator[None]:
-    """Create the single table (matching create_table.py) inside a moto context."""
     with mock_aws():
+        from pastry_api.db import get_table
         from pastry_api.scripts.create_table import create_table
 
+        get_table.cache_clear()
         create_table()
         yield
 

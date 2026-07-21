@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal, Self
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_DEV_SIGNING_KEY = "dev-insecure-key"
 
 
 class Settings(BaseSettings):
@@ -27,8 +30,10 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173"]
 
     # Auth: "dev" injects a fixed stub user; "github" uses the real OAuth flows (slice 3).
-    auth_mode: str = "dev"
-    jwt_signing_key: str = "dev-insecure-key"
+    # Literal, not str: a typo'd PASTRY_AUTH_MODE=githb would otherwise fall through to
+    # the "not dev" branch quietly, or worse, a typo'd "dev" would disable auth outright.
+    auth_mode: Literal["dev", "github"] = "dev"
+    jwt_signing_key: str = _DEV_SIGNING_KEY
     access_token_ttl: int = 900  # seconds (~15 min)
     refresh_token_ttl: int = 2_592_000  # seconds (30 days)
 
@@ -39,6 +44,22 @@ class Settings(BaseSettings):
     github_oauth_client_secret: str = Field(
         default="", validation_alias=AliasChoices("GITHUB_OAUTH_CLIENT_SECRET")
     )
+
+    @model_validator(mode="after")
+    def _reject_dev_defaults_in_github_mode(self) -> Self:
+        """Fail fast rather than serving real traffic with development credentials.
+
+        The defaults here are deliberately permissive so tests and local work need no
+        setup, which means a deploy that forgets ``PASTRY_JWT_SIGNING_KEY`` would sign
+        tokens with a key published in this repo. Crashing at startup is the only
+        failure mode that cannot be missed.
+        """
+        if self.auth_mode == "github" and self.jwt_signing_key == _DEV_SIGNING_KEY:
+            raise ValueError(
+                "PASTRY_JWT_SIGNING_KEY is still the development default; "
+                "set a real secret when PASTRY_AUTH_MODE=github"
+            )
+        return self
 
 
 @lru_cache

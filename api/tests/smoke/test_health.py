@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 from pastry_api.main import app
+
+pytestmark = pytest.mark.smoke
 
 client = TestClient(app)
 

@@ -8,7 +8,7 @@ is only eventual), so an expired paste reads as "not found" even before it is sw
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from boto3.dynamodb.conditions import Key
@@ -35,7 +35,7 @@ class PasteForbidden(Exception):
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _parse_expiry(expires_in: str | None, now: datetime) -> datetime | None:
@@ -44,8 +44,10 @@ def _parse_expiry(expires_in: str | None, now: datetime) -> datetime | None:
         return None
     try:
         return now + _EXPIRY_DELTAS[expires_in]
-    except KeyError:
-        raise ValueError(f"invalid expiry {expires_in!r}; expected one of 1h, 1d, 1w")
+    except KeyError as exc:
+        raise ValueError(
+            f"invalid expiry {expires_in!r}; expected one of 1h, 1d, 1w"
+        ) from exc
 
 
 def _is_expired(item: Item, now: datetime) -> bool:

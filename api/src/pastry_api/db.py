@@ -11,6 +11,7 @@ Key schema (see ``spec.md``):
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 import boto3
@@ -21,8 +22,13 @@ if TYPE_CHECKING:
     from mypy_boto3_dynamodb.service_resource import Table
 
 
+@lru_cache
 def get_table() -> Table:
-    """Return the boto3 Table resource, honoring the dynamodb-local endpoint if set."""
+    """Return the boto3 Table resource, honoring the dynamodb-local endpoint if set.
+
+    Cached process-wide: constructing a boto3 resource is not free, and a warm Lambda
+    reuses this across invocations. Settings are themselves cached (see get_settings).
+    """
     settings = get_settings()
     resource = boto3.resource(
         "dynamodb",
@@ -45,14 +51,3 @@ def paste_sk(ksuid: str) -> str:
 
 def slug_gsi1pk(slug: str) -> str:
     return f"SLUG#{slug}"
-
-
-def refresh_sk(jti: str) -> str:
-    return f"REFRESH#{jti}"
-
-
-def device_pk(device_code: str) -> str:
-    return f"DEVICE#{device_code}"
-
-
-# TODO: item <-> model mapping (to_paste_item / from_paste_item, etc.) lands with slice 1.

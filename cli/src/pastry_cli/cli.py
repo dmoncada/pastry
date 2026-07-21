@@ -10,16 +10,16 @@ clig.dev conventions (see ``spec.md``):
 from __future__ import annotations
 
 import functools
-import json
 import os
 import sys
 from collections.abc import Callable
-from typing import Any, NoReturn
+from typing import ClassVar, NoReturn
 
 import click
+from pydantic import ValidationError
 
 from pastry_cli import session
-from pastry_cli.api import ApiClient, ApiError
+from pastry_cli.api import PASTE_LIST, ApiClient, ApiError
 from pastry_cli.config import Config
 from pastry_cli.session import LoginError
 
@@ -52,15 +52,20 @@ def _client(config: Config) -> ApiClient:
     return ApiClient(config, access_token=session.resolve_access_token(config))
 
 
-def handle_api_errors(fn: Callable[..., Any]) -> Callable[..., Any]:
+def handle_api_errors[**P, T](fn: Callable[P, T]) -> Callable[P, T]:
     """Turn an :class:`ApiError` into a clean stderr message + non-zero exit."""
 
     @functools.wraps(fn)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
         try:
             return fn(*args, **kwargs)
         except ApiError as exc:
             _fail(str(exc))
+        except ValidationError as exc:
+            # Request models are built client-side, so bounds like the paste size limit
+            # reject here rather than at the API. Report the reason, not a traceback.
+            reasons = "; ".join(e["msg"] for e in exc.errors())
+            _fail(reasons or str(exc))
 
     return wrapper
 
@@ -68,7 +73,7 @@ def handle_api_errors(fn: Callable[..., Any]) -> Callable[..., Any]:
 class AliasedGroup(click.Group):
     """Group that resolves command aliases (e.g. ``ls`` -> ``list``, ``rm`` -> ``delete``)."""
 
-    _ALIASES = {"ls": "list", "rm": "delete"}
+    _ALIASES: ClassVar[dict[str, str]] = {"ls": "list", "rm": "delete"}
 
     def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
         return super().get_command(ctx, self._ALIASES.get(cmd_name, cmd_name))
@@ -122,7 +127,7 @@ def create(config: Config, text: str | None, expire: str | None) -> None:
     content = _read_content(text)
     with _client(config) as api:
         paste = api.create(content, expire)
-    slug = paste["slug"]
+    slug = paste.slug
     click.echo(slug)  # stdout: the data (pipeable)
     if sys.stdout.isatty():
         share_url = f"{config.api_url.rstrip('/')}/p/{slug}"
@@ -171,18 +176,18 @@ def list_(config: Config, as_json: bool) -> None:
     with _client(config) as api:
         pastes = api.list()
     if as_json:
-        click.echo(json.dumps(pastes, indent=2))
+        click.echo(PASTE_LIST.dump_json(pastes, indent=2).decode())
         return
     if not pastes:
         click.echo("no pastes yet", err=True)
         return
     for paste in pastes:
-        preview = paste["content"].splitlines()[0] if paste["content"] else ""
+        preview = paste.content.splitlines()[0] if paste.content else ""
         if len(preview) > 50:
             preview = preview[:49] + "…"
-        line = f'{_styled_slug(paste["slug"])}  "{preview}"'
-        if paste.get("expires_at"):
-            line += f"  (expires {paste['expires_at']})"
+        line = f'{_styled_slug(paste.slug)}  "{preview}"'
+        if paste.expires_at is not None:
+            line += f"  (expires {paste.expires_at:%Y-%m-%d %H:%M})"
         click.echo(line)
 
 

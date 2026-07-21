@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json as _json
 from typing import Any
 
 import pytest
@@ -16,6 +17,11 @@ class FakeResponse:
 
     def json(self) -> dict[str, Any]:
         return self._payload
+
+    @property
+    def content(self) -> bytes:
+        """Mirror ``httpx.Response.content`` — the models parse raw bytes."""
+        return _json.dumps(self._payload).encode()
 
 
 def _config() -> Config:
@@ -44,7 +50,7 @@ def test_rotates_and_persists_new_refresh(monkeypatch: pytest.MonkeyPatch) -> No
         session.httpx,
         "post",
         lambda *a, **k: FakeResponse(
-            200, {"access_token": "AT", "refresh_token": "NEW"}
+            200, {"access_token": "AT", "refresh_token": "NEW", "expires_in": 900}
         ),
     )
     assert session.resolve_access_token(_config()) == "AT"
@@ -84,7 +90,9 @@ class FakeDeviceClient:
                     "expires_in": 900,
                 },
             )
-        return FakeResponse(200, {"refresh_token": "RT"})
+        return FakeResponse(
+            200, {"access_token": "AT", "refresh_token": "RT", "expires_in": 900}
+        )
 
 
 def test_device_login_persists_api_url(monkeypatch: pytest.MonkeyPatch) -> None:

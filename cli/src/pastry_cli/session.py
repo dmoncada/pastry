@@ -7,9 +7,12 @@ refresh token, so the new one is written back to the keychain."""
 from __future__ import annotations
 
 import time
+from contextlib import suppress
 
 import click
 import httpx
+from pastry_shared.models import DeviceAuthResponse, TokenPair
+from pydantic import ValidationError
 
 from pastry_cli.auth import clear_refresh_token, load_refresh_token, save_refresh_token
 from pastry_cli.config import Config, save_api_url
@@ -41,9 +44,12 @@ def resolve_access_token(config: Config) -> str | None:
     if resp.status_code != 200:
         clear_refresh_token()
         return None
-    data = resp.json()
-    save_refresh_token(data["refresh_token"])
-    return str(data["access_token"])
+    try:
+        tokens = TokenPair.model_validate_json(resp.content)
+    except ValidationError:
+        return None  # malformed response: don't clear a session that may still be good
+    save_refresh_token(tokens.refresh_token)
+    return tokens.access_token
 
 
 def device_login(config: Config) -> None:
@@ -56,24 +62,30 @@ def device_login(config: Config) -> None:
             raise LoginError(f"could not reach the API at {base}") from exc
         if start.status_code != 200:
             raise LoginError(_detail(start))
-        flow = start.json()
+        try:
+            flow = DeviceAuthResponse.model_validate_json(start.content)
+        except ValidationError as exc:
+            raise LoginError("unexpected device-authorization response") from exc
 
         click.echo(
-            f"Open {flow['verification_uri']} and enter code: "
-            f"{click.style(flow['user_code'], bold=True)}",
+            f"Open {flow.verification_uri} and enter code: "
+            f"{click.style(flow.user_code, bold=True)}",
             err=True,
         )
-        click.launch(flow["verification_uri"])
+        click.launch(flow.verification_uri)
 
-        interval = int(flow.get("interval", 5))
-        deadline = time.monotonic() + int(flow.get("expires_in", 900))
+        deadline = time.monotonic() + flow.expires_in
         while time.monotonic() < deadline:
-            time.sleep(interval)
+            time.sleep(flow.interval)
             resp = client.post(
-                "/auth/device/token", json={"device_code": flow["device_code"]}
+                "/auth/device/token", json={"device_code": flow.device_code}
             )
             if resp.status_code == 200:
-                save_refresh_token(resp.json()["refresh_token"])
+                try:
+                    tokens = TokenPair.model_validate_json(resp.content)
+                except ValidationError as exc:
+                    raise LoginError("unexpected token response") from exc
+                save_refresh_token(tokens.refresh_token)
                 save_api_url(
                     config.api_url
                 )  # make this endpoint the default for next time
@@ -88,14 +100,13 @@ def logout(config: Config) -> None:
     """Revoke the stored refresh token server-side (best effort) and clear it locally."""
     raw = load_refresh_token()
     if raw is not None:
-        try:
+        # Revoke is best-effort; we always clear locally even if the API is unreachable.
+        with suppress(httpx.RequestError):
             httpx.post(
                 f"{config.api_url.rstrip('/')}/auth/logout",
                 json={"refresh_token": raw},
                 timeout=10.0,
             )
-        except httpx.RequestError:
-            pass  # revoke is best-effort; always clear locally
     clear_refresh_token()
 
 

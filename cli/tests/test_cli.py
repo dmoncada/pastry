@@ -5,12 +5,28 @@ against the real backend is covered by the live smoke in the slice-2 verificatio
 
 from __future__ import annotations
 
-from typing import Any
+from datetime import UTC, datetime
 
 import pytest
 from click.testing import CliRunner
 from pastry_cli import cli
 from pastry_cli.api import ApiError
+from pastry_shared.models import Paste
+
+_EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+def make_paste(slug: str, content: str, expires_at: datetime | None = None) -> Paste:
+    """Build a fully-populated :class:`Paste`, as the real API would return."""
+    return Paste(
+        slug=slug,
+        content=content,
+        owner_github_id="42",
+        created_at=_EPOCH,
+        updated_at=_EPOCH,
+        expires_at=expires_at,
+        size=len(content),
+    )
 
 
 class FakeClient:
@@ -19,13 +35,11 @@ class FakeClient:
         self.edited: tuple[str, str] | None = None
         self.deleted: str | None = None
         self.raw = "raw paste body"
-        self.listing: list[dict[str, Any]] = [
-            {"slug": "AAA", "content": "first line\nsecond", "expires_at": None},
-            {
-                "slug": "BBB",
-                "content": "ephemeral",
-                "expires_at": "2026-07-17T00:00:00+00:00",
-            },
+        self.listing: list[Paste] = [
+            make_paste("AAA", "first line\nsecond"),
+            make_paste(
+                "BBB", "ephemeral", expires_at=datetime(2026, 7, 17, tzinfo=UTC)
+            ),
         ]
         self.error: ApiError | None = None
 
@@ -39,23 +53,23 @@ class FakeClient:
         if self.error is not None:
             raise self.error
 
-    def create(self, content: str, expire: str | None = None) -> dict[str, Any]:
+    def create(self, content: str, expire: str | None = None) -> Paste:
         self._maybe_raise()
         self.created = (content, expire)
-        return {"slug": "NEWSLUG", "content": content}
+        return make_paste("NEWSLUG", content)
 
     def get_raw(self, slug: str) -> str:
         self._maybe_raise()
         return self.raw
 
-    def list(self) -> list[dict[str, Any]]:  # ty: ignore[invalid-type-form]
+    def list(self) -> list[Paste]:  # ty: ignore[invalid-type-form]
         self._maybe_raise()
         return self.listing
 
-    def edit(self, slug: str, content: str) -> dict[str, Any]:
+    def edit(self, slug: str, content: str) -> Paste:
         self._maybe_raise()
         self.edited = (slug, content)
-        return {"slug": slug, "content": content}
+        return make_paste(slug, content)
 
     def delete(self, slug: str) -> None:
         self._maybe_raise()
@@ -105,7 +119,9 @@ def test_list_json(fake: FakeClient, runner: CliRunner) -> None:
 
     result = runner.invoke(cli.main, ["list", "--json"])
     assert result.exit_code == 0
-    assert json.loads(result.stdout) == fake.listing
+    assert json.loads(result.stdout) == [
+        p.model_dump(mode="json") for p in fake.listing
+    ]
 
 
 def test_list_human_shows_slugs_and_preview(

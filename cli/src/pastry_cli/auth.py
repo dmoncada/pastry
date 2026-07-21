@@ -6,6 +6,8 @@ held only in memory and re-minted on demand. ``PASTRY_TOKEN`` (env) overrides ev
 
 from __future__ import annotations
 
+from contextlib import suppress
+
 import keyring
 from keyring.errors import KeyringError
 
@@ -45,10 +47,8 @@ def load_refresh_token() -> str | None:
 
 def clear_refresh_token() -> None:
     """Remove any stored refresh token (used by ``pastry logout``)."""
-    try:
+    with suppress(KeyringError):
         keyring.delete_password(_SERVICE, _REFRESH_KEY)
-    except KeyringError:
-        pass
     from pathlib import Path
 
     file = Path(_fallback_path())

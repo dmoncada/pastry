@@ -8,8 +8,28 @@ single-table sketch.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
+
+# DynamoDB caps a single item at 400KB, and a paste's content shares that budget with its
+# keys and metadata. 256KiB keeps a comfortable margin while staying far above any
+# plausible paste, and turns an oversized body into a 422 instead of a write-time 500.
+MAX_CONTENT_BYTES = 256 * 1024
+
+
+def _within_size_limit(value: str) -> str:
+    # Measured in UTF-8 bytes, not characters: that is what DynamoDB counts, so a
+    # character-based limit would still let a multi-byte body blow the item cap.
+    size = len(value.encode("utf-8"))
+    if size > MAX_CONTENT_BYTES:
+        raise ValueError(f"content is {size} bytes; the maximum is {MAX_CONTENT_BYTES}")
+    return value
+
+
+# Applied to inbound content only. Stored pastes are returned unvalidated, so an item
+# written before this limit existed still reads back rather than 500-ing.
+PasteContent = Annotated[str, AfterValidator(_within_size_limit)]
 
 # --- User ---------------------------------------------------------------------------
 
@@ -29,7 +49,7 @@ class User(BaseModel):
 class PasteCreate(BaseModel):
     """Request body / CLI input for creating a paste."""
 
-    content: str
+    content: PasteContent
     expires_in: str | None = Field(
         default=None,
         description="Optional TTL shorthand: '1h', '1d', '1w'. None means never expires.",
@@ -39,7 +59,7 @@ class PasteCreate(BaseModel):
 class PasteUpdate(BaseModel):
     """Request body / CLI input for editing a paste's content."""
 
-    content: str
+    content: PasteContent
 
 
 class Paste(BaseModel):

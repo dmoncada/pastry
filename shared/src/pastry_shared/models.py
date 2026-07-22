@@ -88,9 +88,23 @@ class DeviceAuthResponse(BaseModel):
 
 
 class TokenPair(BaseModel):
-    """What the backend issues after identity is verified."""
+    """What the backend issues after identity is verified.
+
+    The CLI receives this whole pair in the response body and persists the refresh token
+    itself. The web client instead gets :class:`AccessTokenResponse` plus an HttpOnly
+    refresh cookie, so its refresh token never touches JS-readable storage.
+    """
 
     access_token: str
     refresh_token: str
+    token_type: str = "Bearer"
+    expires_in: int  # access-token lifetime in seconds
+
+
+class AccessTokenResponse(BaseModel):
+    """Web-client token response: the access JWT only. The refresh token is delivered
+    out-of-band in an HttpOnly cookie (see ``routers/auth.py``), never in the body."""
+
+    access_token: str
     token_type: str = "Bearer"
     expires_in: int  # access-token lifetime in seconds

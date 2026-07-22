@@ -3,7 +3,7 @@ output "table_name" {
 }
 
 output "api_url" {
-  description = "Invoke URL for the HTTP API (set as the web app's VITE_API_URL)."
+  description = "Invoke URL for the HTTP API (direct origin; the web app reaches it same-origin via CloudFront /api). Useful for the CLI and health checks."
   value       = aws_apigatewayv2_api.http.api_endpoint
 }
 

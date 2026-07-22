@@ -11,7 +11,9 @@ from pastry_api.routers import auth, pastes
 
 app = FastAPI(title="Pastry API", version="0.1.0")
 
-# Bearer tokens (not cookies) → allow_credentials stays False, which permits "*" headers.
+# The web app is served same-origin with the API (CloudFront routes /api/* to this app, and
+# the dev vite server proxies /api), so browser calls need no CORS at all. This stays only
+# for direct cross-origin dev hits; allow_credentials=False keeps the "*" wildcards valid.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_origins,
@@ -20,8 +22,14 @@ app.add_middleware(
     allow_credentials=False,
 )
 
+# Mount the same handlers at both the root and under /api. The CLI (and API-Gateway-direct
+# traffic) uses the root paths with the refresh token in the request body; the browser uses
+# /api via CloudFront so the refresh cookie is first-party. /api also disambiguates the read
+# API from the SPA route of the same shape — /p/<slug> serves the app, /api/p/<slug> the JSON.
 app.include_router(pastes.router)
 app.include_router(auth.router)
+app.include_router(pastes.router, prefix="/api")
+app.include_router(auth.router, prefix="/api")
 
 
 @app.get("/healthz")

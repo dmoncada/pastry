@@ -1,5 +1,5 @@
-import { api, ApiError, beginLogin, logout } from "@/api";
-import { getAccessToken } from "@/auth";
+import { api, ApiError, beginLogin, errorText, logout } from "@/api";
+import { useAuthResolved, useSignedIn } from "@/auth";
 import type { Expiry, Me, Paste } from "@/types";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -15,23 +15,45 @@ export function Home(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  // `active` lets the mount effect drop a late response after unmount; event-handler
+  // callers are always mounted and can rely on the default.
+  const refresh = useCallback(async (active: () => boolean = () => true) => {
     try {
       const list = await api.listPastes();
+      if (!active()) return;
       setPastes(list);
       setNeedsAuth(false);
+      setError(null);
     } catch (err) {
+      if (!active()) return;
       if (err instanceof ApiError && err.status === 401) setNeedsAuth(true);
-      else setError(String(err));
+      else setError(errorText(err));
     }
   }, []);
 
   useEffect(() => {
-    api
-      .me()
-      .then(setMe)
-      .catch(() => setMe(null));
-    void refresh();
+    let active = true;
+
+    async function load(): Promise<void> {
+      // Both requests are started before either is awaited, so they overlap rather
+      // than forming a waterfall.
+      const mePromise = api.me();
+      const pastesPromise = refresh(() => active);
+
+      try {
+        const loaded = await mePromise;
+        if (active) setMe(loaded);
+      } catch {
+        if (active) setMe(null); // signed out is not an error worth surfacing
+      }
+
+      await pastesPromise;
+    }
+
+    void load();
+    return () => {
+      active = false;
+    };
   }, [refresh]);
 
   const resetEditor = () => {
@@ -51,7 +73,7 @@ export function Home(): JSX.Element {
       resetEditor();
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : String(err));
+      setError(errorText(err));
     } finally {
       setBusy(false);
     }
@@ -60,7 +82,8 @@ export function Home(): JSX.Element {
   const startEdit = (paste: Paste) => {
     setEditingSlug(paste.slug);
     setContent(paste.content);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
   };
 
   const remove = async (slug: string) => {
@@ -70,13 +93,35 @@ export function Home(): JSX.Element {
       if (editingSlug === slug) resetEditor();
       await refresh();
     } catch (err) {
-      setError(String(err));
+      setError(errorText(err));
     }
   };
 
-  const copyLink = (slug: string) => {
-    void navigator.clipboard?.writeText(`${window.location.origin}/p/${slug}`);
-    setCopiedSlug(slug);
+  const copyLink = async (slug: string) => {
+    try {
+      // Throws on insecure origins, where `clipboard` is undefined entirely.
+      await navigator.clipboard.writeText(`${window.location.origin}/p/${slug}`);
+      setCopiedSlug(slug);
+    } catch {
+      setError("Could not copy to the clipboard.");
+    }
+  };
+
+  const signIn = async () => {
+    try {
+      await beginLogin();
+    } catch (err) {
+      setError(errorText(err));
+    }
+  };
+
+  const signOut = async () => {
+    await logout();
+    setMe(null);
+    setPastes([]);
+    setNeedsAuth(true);
+    setError(null);
+    resetEditor();
   };
 
   useEffect(() => {
@@ -85,7 +130,8 @@ export function Home(): JSX.Element {
     return () => window.clearTimeout(timer);
   }, [copiedSlug]);
 
-  const signedIn = getAccessToken() !== null;
+  const signedIn = useSignedIn();
+  const authResolved = useAuthResolved();
 
   return (
     <main className="container">
@@ -93,32 +139,34 @@ export function Home(): JSX.Element {
         <h1>
           <Link to="/">Pastry</Link>
         </h1>
+        {/* Until the initial silent refresh resolves, render nothing rather than flashing
+            the sign-in button at an already-signed-in user. */}
         {signedIn ? (
           <div className="auth">
             <span className="muted">{me ? `@${me.login}` : "signed in"}</span>
-            <button
-              className="link"
-              onClick={() => {
-                void logout().then(() => window.location.reload());
-              }}
-            >
+            <button type="button" className="link" onClick={() => void signOut()}>
               sign out
             </button>
           </div>
-        ) : (
-          <button className="btn" onClick={() => void beginLogin()}>
+        ) : authResolved ? (
+          <button type="button" className="btn" onClick={() => void signIn()}>
             Sign in with GitHub
           </button>
-        )}
+        ) : null}
       </header>
 
       <form className="editor" onSubmit={submit}>
+        <label className="sr-only" htmlFor="paste-content">
+          Paste content
+        </label>
         <textarea
+          id="paste-content"
+          name="content"
           value={content}
           onChange={(e) => setContent(e.target.value)}
           placeholder={editingSlug ? `Editing ${editingSlug}…` : "Paste your text here…"}
           rows={8}
-          aria-label="paste content"
+          spellCheck={false}
         />
         <div className="editor-actions">
           {!editingSlug && (
@@ -139,18 +187,27 @@ export function Home(): JSX.Element {
             </button>
           )}
           <button type="submit" className="btn" disabled={!signedIn || busy || !content.trim()}>
-            {editingSlug ? "Save changes" : "Create paste"}
+            {busy ? "Saving…" : editingSlug ? "Save changes" : "Create paste"}
           </button>
         </div>
       </form>
 
-      {error && <p className="error">{error}</p>}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+
+      {/* Announces clipboard success, which is otherwise only a button-label change. */}
+      <p className="sr-only" role="status" aria-live="polite">
+        {copiedSlug ? `Link to ${copiedSlug} copied to the clipboard.` : ""}
+      </p>
 
       <section>
         <h2>Your pastes</h2>
         {needsAuth ? (
           <p className="muted">
-            <button className="link" onClick={() => void beginLogin()}>
+            <button type="button" className="link" onClick={() => void signIn()}>
               Sign in
             </button>{" "}
             to see your pastes.
@@ -167,13 +224,28 @@ export function Home(): JSX.Element {
                 <span className="preview">{p.content.split("\n")[0].slice(0, 60) || "—"}</span>
                 {p.expires_at && <span className="badge">expires</span>}
                 <span className="row-actions">
-                  <button className="link" onClick={() => copyLink(p.slug)}>
+                  <button
+                    type="button"
+                    className="link"
+                    onClick={() => void copyLink(p.slug)}
+                    aria-label={`Copy link to paste ${p.slug}`}
+                  >
                     {copiedSlug === p.slug ? "copied!" : "copy link"}
                   </button>
-                  <button className="link" onClick={() => startEdit(p)}>
+                  <button
+                    type="button"
+                    className="link"
+                    onClick={() => startEdit(p)}
+                    aria-label={`Edit paste ${p.slug}`}
+                  >
                     edit
                   </button>
-                  <button className="link danger" onClick={() => void remove(p.slug)}>
+                  <button
+                    type="button"
+                    className="link danger"
+                    onClick={() => void remove(p.slug)}
+                    aria-label={`Delete paste ${p.slug}`}
+                  >
                     delete
                   </button>
                 </span>

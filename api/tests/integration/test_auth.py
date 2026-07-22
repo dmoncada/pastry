@@ -157,6 +157,57 @@ def test_logout_revokes_refresh(client: TestClient, github: FakeGitHub) -> None:
     assert after.status_code == 401
 
 
+# --- web cookie transport (browser client, /api mount) -------------------------------
+
+
+def test_callback_sets_refresh_cookie_and_hides_it_from_body(
+    client: TestClient, github: FakeGitHub
+) -> None:
+    resp = client.get("/api/auth/github/callback", params={"code": "ok", "state": "s"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "access_token" in body
+    assert "refresh_token" not in body  # rides in the cookie, never the web body
+    set_cookie = resp.headers["set-cookie"]
+    assert "pastry_refresh=" in set_cookie
+    assert "HttpOnly" in set_cookie
+    assert "Path=/api/auth" in set_cookie
+
+
+def test_refresh_via_cookie_rotates_and_omits_refresh_from_body(
+    client: TestClient, github: FakeGitHub
+) -> None:
+    # Sign in via the callback so the client's cookie jar holds the refresh cookie.
+    client.get("/api/auth/github/callback", params={"code": "ok", "state": "s"})
+
+    rotated = client.post("/api/auth/refresh")  # no body: refresh comes from the cookie
+    assert rotated.status_code == 200
+    assert "refresh_token" not in rotated.json()
+    assert "pastry_refresh=" in rotated.headers["set-cookie"]  # rotated cookie re-set
+
+
+def test_logout_via_cookie_clears_cookie_and_revokes(
+    client: TestClient, github: FakeGitHub
+) -> None:
+    client.get("/api/auth/github/callback", params={"code": "ok", "state": "s"})
+
+    resp = client.post("/api/auth/logout")  # no body: cookie transport
+    assert resp.status_code == 204
+    # Deletion re-sets the cookie with an immediate expiry.
+    assert (
+        'pastry_refresh=""' in resp.headers["set-cookie"]
+        or "Max-Age=0" in (resp.headers["set-cookie"])
+    )
+    # The revoked token can no longer be rotated (the jar cleared it, so send none → 401).
+    assert client.post("/api/auth/refresh").status_code == 401
+
+
+def test_refresh_without_cookie_or_body_is_401(
+    client: TestClient, github: FakeGitHub
+) -> None:
+    assert client.post("/api/auth/refresh").status_code == 401
+
+
 # --- auth dependency in github mode --------------------------------------------------
 
 

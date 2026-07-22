@@ -1,6 +1,8 @@
+import { bootstrapAuth } from "@/api";
 import { Callback } from "@/routes/Callback";
 import { Home } from "@/routes/Home";
 import { PastePage } from "@/routes/PastePage";
+import { useEffect } from "react";
 import { Link, Route, Routes } from "react-router-dom";
 
 function NotFound(): JSX.Element {
@@ -15,6 +17,12 @@ function NotFound(): JSX.Element {
 }
 
 export function App(): JSX.Element {
+  // Silently restore the session from the refresh cookie on load (the access token is
+  // memory-only and gone after a reload). Idempotent — bootstrapAuth self-guards.
+  useEffect(() => {
+    void bootstrapAuth();
+  }, []);
+
   return (
     <Routes>
       <Route path="/" element={<Home />} />

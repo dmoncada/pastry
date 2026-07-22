@@ -5,14 +5,11 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
-COPY api/pyproject.toml ./api/
-COPY cli/pyproject.toml ./cli/
-COPY shared/pyproject.toml ./shared/
+COPY api/ ./api/
+COPY cli/ ./cli/
+COPY shared/ ./shared/
 
 RUN uv sync --package pastry-api --no-dev --no-default-groups
-
-COPY api/ ./api/
-COPY shared/ ./shared/
 
 ENV PATH="/app/.venv/bin:${PATH}"
 

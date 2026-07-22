@@ -1,10 +1,11 @@
+import { api } from "@/api";
+import { clearAccessToken, setAccessToken } from "@/auth";
+import { Home } from "@/routes/Home";
+import type { Paste } from "@/types";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api } from "@/api";
-import { Home } from "@/routes/Home";
-import type { Paste } from "@/types";
 
 vi.mock("@/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/api")>();
@@ -41,11 +42,11 @@ function paste(over: Partial<Paste> = {}): Paste {
 beforeEach(() => {
   vi.clearAllMocks();
   mockApi.me.mockResolvedValue({ github_id: "dev-user", login: "dev-user" });
-  localStorage.setItem("pastry.access", "test-access-token"); // signed in: enables the editor
+  setAccessToken("test-access-token"); // signed in (in-memory): enables the editor
 });
 
 afterEach(() => {
-  localStorage.clear();
+  clearAccessToken();
 });
 
 describe("Home", () => {
@@ -70,7 +71,7 @@ describe("Home", () => {
     );
     await waitFor(() => expect(mockApi.listPastes).toHaveBeenCalled());
 
-    await userEvent.type(screen.getByLabelText("paste content"), "brand new paste");
+    await userEvent.type(screen.getByLabelText("Paste content"), "brand new paste");
     await userEvent.click(screen.getByRole("button", { name: "Create paste" }));
 
     await waitFor(() => expect(mockApi.createPaste).toHaveBeenCalledWith("brand new paste", ""));

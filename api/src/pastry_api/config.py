@@ -37,6 +37,13 @@ class Settings(BaseSettings):
     access_token_ttl: int = 900  # seconds (~15 min)
     refresh_token_ttl: int = 2_592_000  # seconds (30 days)
 
+    # Refresh-token cookie (web client only; the CLI carries the token in the request body).
+    # Secure is off for local http and set true in prod (HTTPS). SameSite=Lax is safe because
+    # the API is served same-origin with the SPA (under /api via CloudFront), so the cookie
+    # is first-party — no third-party-cookie fragility, and Lax blocks cross-site POSTs.
+    cookie_secure: bool = False
+    cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+
     # GitHub's conventional env-var names, exempt from the PASTRY_ prefix.
     github_oauth_client_id: str = Field(
         default="", validation_alias=AliasChoices("GITHUB_OAUTH_CLIENT_ID")

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
+
 # Package the FastAPI backend into build/lambda.zip for the AWS Lambda (python3.12, x86_64).
 # Third-party deps are cross-installed as manylinux wheels; first-party packages are copied.
+
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

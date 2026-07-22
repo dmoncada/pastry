@@ -12,6 +12,15 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // Same-origin dev: proxy the API so the refresh cookie is first-party, matching prod
+    // (where CloudFront routes /api/* to API Gateway). The backend serves /api itself, so no
+    // path rewrite is needed. Override the target with VITE_PROXY_TARGET.
+    proxy: {
+      "/api": {
+        target: process.env.VITE_PROXY_TARGET ?? "http://localhost:8080",
+        changeOrigin: true,
+      },
+    },
   },
   test: {
     environment: "jsdom",

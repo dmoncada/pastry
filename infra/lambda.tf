@@ -74,6 +74,7 @@ resource "aws_lambda_function" "api" {
       PASTRY_TABLE_NAME          = aws_dynamodb_table.pastry.name
       PASTRY_AUTH_MODE           = var.auth_mode
       PASTRY_CORS_ORIGINS        = jsonencode([local.frontend_url])
+      PASTRY_COOKIE_SECURE       = "true" # HTTPS-only refresh cookie in prod
       PASTRY_JWT_SIGNING_KEY     = aws_ssm_parameter.jwt_signing_key.value
       GITHUB_OAUTH_CLIENT_ID     = var.github_oauth_client_id
       GITHUB_OAUTH_CLIENT_SECRET = aws_ssm_parameter.github_client_secret.value

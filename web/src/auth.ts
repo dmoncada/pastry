@@ -1,27 +1,65 @@
-// Token storage for the web client.
+// In-memory auth state for the web client, exposed as a subscribable store for components.
 //
-// NOTE: for the MVP both tokens live in localStorage. Production hardening (per spec.md)
-// moves the refresh token to an HttpOnly, Secure cookie set by the backend — that needs a
-// backend change (the callback currently returns the pair as JSON), tracked for later.
-import type { TokenPair } from "@/types";
+// The access JWT lives in a module variable — never in localStorage/sessionStorage — and the
+// refresh token lives in an HttpOnly cookie the backend sets, so JS can read neither. On a
+// full reload the in-memory token is gone; `bootstrapAuth` (see api.ts) silently re-mints it
+// from the cookie before the UI resolves.
+//
+// Because the token is in-memory it is not shared across tabs; the old cross-tab `storage`
+// listener would be dead here, so cross-tab logout is intentionally dropped (revisit with a
+// BroadcastChannel if it's wanted).
 
-const ACCESS_KEY = "pastry.access";
-const REFRESH_KEY = "pastry.refresh";
+import { useSyncExternalStore } from "react";
+
+type AuthSnapshot = {
+  token: string | null;
+  // Whether the initial silent refresh has settled. Lets the UI tell "still checking" apart
+  // from "definitely signed out" and avoid flashing the signed-out state on load.
+  resolved: boolean;
+};
+
+// A fresh object per distinct state, so useSyncExternalStore can compare snapshots by
+// identity; mutating in place would make it miss updates.
+let snapshot: AuthSnapshot = { token: null, resolved: false };
+const listeners = new Set<() => void>();
+
+function emit(): void {
+  for (const listener of listeners) listener();
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function update(next: Partial<AuthSnapshot>): void {
+  snapshot = { ...snapshot, ...next };
+  emit();
+}
 
 export function getAccessToken(): string | null {
-  return localStorage.getItem(ACCESS_KEY);
+  return snapshot.token;
 }
 
-export function getRefreshToken(): string | null {
-  return localStorage.getItem(REFRESH_KEY);
+export function setAccessToken(token: string): void {
+  update({ token });
 }
 
-export function setTokens(pair: TokenPair): void {
-  localStorage.setItem(ACCESS_KEY, pair.access_token);
-  localStorage.setItem(REFRESH_KEY, pair.refresh_token);
+export function clearAccessToken(): void {
+  update({ token: null });
 }
 
-export function clearTokens(): void {
-  localStorage.removeItem(ACCESS_KEY);
-  localStorage.removeItem(REFRESH_KEY);
+// Called once after the initial silent refresh settles (success or failure).
+export function markAuthResolved(): void {
+  if (!snapshot.resolved) update({ resolved: true });
+}
+
+export function useSignedIn(): boolean {
+  return useSyncExternalStore(subscribe, () => snapshot.token !== null);
+}
+
+export function useAuthResolved(): boolean {
+  return useSyncExternalStore(subscribe, () => snapshot.resolved);
 }

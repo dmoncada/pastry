@@ -1,7 +1,7 @@
 [project]
 name = "pastry-api"
 version = "0.1.0"
-description = "Pastry backend — FastAPI on Lambda over DynamoDB"
+description = "Pastry API — FastAPI on Lambda over DynamoDB"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",

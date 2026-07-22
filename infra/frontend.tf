@@ -30,6 +30,21 @@ resource "aws_cloudfront_distribution" "frontend" {
     origin_access_control_id = aws_cloudfront_origin_access_control.frontend.id
   }
 
+  # The HTTP API, fronted by the same CloudFront domain so the SPA and API are same-origin
+  # (the refresh cookie is then first-party). api_endpoint is a full URL; the custom origin
+  # wants the bare host.
+  origin {
+    domain_name = replace(aws_apigatewayv2_api.http.api_endpoint, "https://", "")
+    origin_id   = "api-gateway"
+
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "https-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
   default_cache_behavior {
     target_origin_id       = "s3-frontend"
     viewer_protocol_policy = "redirect-to-https"
@@ -37,6 +52,20 @@ resource "aws_cloudfront_distribution" "frontend" {
     cached_methods         = ["GET", "HEAD"]
     # AWS managed "CachingOptimized" policy.
     cache_policy_id = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+  }
+
+  # Route the API under /api to API Gateway. The app serves these paths itself (see main.py),
+  # so nothing is stripped. Caching is disabled and all viewer headers/cookies/query are
+  # forwarded (except Host, which API Gateway supplies), so Authorization and the refresh
+  # cookie pass through and responses are never cached.
+  ordered_cache_behavior {
+    path_pattern             = "/api/*"
+    target_origin_id         = "api-gateway"
+    viewer_protocol_policy   = "redirect-to-https"
+    allowed_methods          = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    cached_methods           = ["GET", "HEAD"]
+    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # Managed-CachingDisabled
+    origin_request_policy_id = "b689b0a8-53d0-40ab-baf2-68738e2966ac" # Managed-AllViewerExceptHostHeader
   }
 
   # SPA fallback: client-side routes (e.g. /p/<slug>) resolve to index.html.

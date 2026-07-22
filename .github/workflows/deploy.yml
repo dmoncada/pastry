@@ -82,7 +82,7 @@ jobs:
       - name: Build frontend
         working-directory: web
         env:
-          VITE_API_URL: ${{ steps.tf.outputs.api_url }}
+          VITE_API_URL: /api
         run: npm ci && npm run build
 
       - name: Sync to S3 + invalidate CloudFront

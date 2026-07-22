@@ -1,4 +1,4 @@
-import { completeLogin } from "@/api";
+import { completeLogin, errorText } from "@/api";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
@@ -18,22 +18,34 @@ export function Callback(): JSX.Element {
       setError("Missing code or state in callback.");
       return;
     }
-    completeLogin(code, state)
-      .then(() => navigate("/", { replace: true }))
-      .catch((err) => setError(String(err)));
+
+    async function exchange(authCode: string, authState: string): Promise<void> {
+      try {
+        await completeLogin(authCode, authState);
+        navigate("/", { replace: true });
+      } catch (err) {
+        setError(errorText(err));
+      }
+    }
+
+    void exchange(code, state);
   }, [params, navigate]);
 
   return (
     <main className="container">
       {error ? (
         <>
-          <p className="error">{error}</p>
+          <p className="error" role="alert">
+            {error}
+          </p>
           <p>
             <Link to="/">← back to Pastry</Link>
           </p>
         </>
       ) : (
-        <p className="muted">Signing you in…</p>
+        <p className="muted" role="status" aria-live="polite">
+          Signing you in…
+        </p>
       )}
     </main>
   );

@@ -20,4 +20,13 @@ export interface TokenPair {
   expires_in: number;
 }
 
+// The web sign-in/refresh response: access token only. The refresh token is delivered in an
+// HttpOnly cookie the backend sets, never in the body (see api.ts). TokenPair is the CLI's
+// body shape, kept here for reference.
+export interface AccessTokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+}
+
 export type Expiry = "" | "1h" | "1d" | "1w";

@@ -13,11 +13,17 @@ rm -rf "$build"
 mkdir -p "$stage"
 
 # External dependencies only (exclude the workspace members — we copy their source below).
-uv export --package pastry-api --no-dev --no-emit-workspace --no-hashes \
+uv export --package pastry-api \
+  --no-dev \
+  --no-hashes \
+  --no-emit-workspace \
   -o "$build/requirements.txt"
 
 uv pip install -r "$build/requirements.txt" --target "$stage" \
-  --python-platform x86_64-manylinux2014 --python-version 3.12 --only-binary=:all:
+  --python-platform x86_64-manylinux2014 \
+  --python-version 3.12 \
+  --only-binary=:all: \
+  --no-binary=python-baseconv
 
 cp -r "$root/api/src/pastry_api" "$stage/"
 cp -r "$root/shared/src/pastry_shared" "$stage/"

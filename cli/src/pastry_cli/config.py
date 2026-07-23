@@ -10,7 +10,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-_DEFAULT_API_URL = "http://localhost:8080"
+_DEFAULT_API_URL = "http://localhost:5173/api"
 
 
 def config_dir() -> Path:

@@ -103,11 +103,11 @@ def test_revoke_then_rotate_fails(table: None) -> None:
 
 
 def test_device_flow_success(client: TestClient, github: FakeGitHub) -> None:
-    code = client.post("/auth/device/code")
+    code = client.post("/api/auth/device/code")
     assert code.status_code == 200
     assert code.json()["user_code"] == "WDJB-MJHT"
 
-    resp = client.post("/auth/device/token", json={"device_code": "DC-123"})
+    resp = client.post("/api/auth/device/token", json={"device_code": "DC-123"})
     assert resp.status_code == 200
     tokens = resp.json()
     assert decode_access_token(tokens["access_token"], get_settings()) == "12345"
@@ -118,42 +118,46 @@ def test_device_flow_pending_returns_428(
     client: TestClient, github: FakeGitHub
 ) -> None:
     github.pending = True
-    resp = client.post("/auth/device/token", json={"device_code": "DC-123"})
+    resp = client.post("/api/auth/device/token", json={"device_code": "DC-123"})
     assert resp.status_code == 428
 
 
 def test_github_callback_success(client: TestClient, github: FakeGitHub) -> None:
-    resp = client.get("/auth/github/callback", params={"code": "ok", "state": "s"})
+    resp = client.get("/api/auth/github/callback", params={"code": "ok", "state": "s"})
     assert resp.status_code == 200
     assert decode_access_token(resp.json()["access_token"], get_settings()) == "12345"
 
 
 def test_github_callback_bad_code_400(client: TestClient, github: FakeGitHub) -> None:
-    resp = client.get("/auth/github/callback", params={"code": "bad", "state": "s"})
+    resp = client.get("/api/auth/github/callback", params={"code": "bad", "state": "s"})
     assert resp.status_code == 400
 
 
 def test_refresh_endpoint_rotates(client: TestClient, github: FakeGitHub) -> None:
-    pair = client.post("/auth/device/token", json={"device_code": "DC-123"}).json()
+    pair = client.post("/api/auth/device/token", json={"device_code": "DC-123"}).json()
 
     rotated = client.post(
-        "/auth/refresh", json={"refresh_token": pair["refresh_token"]}
+        "/api/auth/refresh", json={"refresh_token": pair["refresh_token"]}
     )
     assert rotated.status_code == 200
     # old refresh token no longer works
-    reused = client.post("/auth/refresh", json={"refresh_token": pair["refresh_token"]})
+    reused = client.post(
+        "/api/auth/refresh", json={"refresh_token": pair["refresh_token"]}
+    )
     assert reused.status_code == 401
 
 
 def test_logout_revokes_refresh(client: TestClient, github: FakeGitHub) -> None:
-    pair = client.post("/auth/device/token", json={"device_code": "DC-123"}).json()
+    pair = client.post("/api/auth/device/token", json={"device_code": "DC-123"}).json()
     assert (
         client.post(
-            "/auth/logout", json={"refresh_token": pair["refresh_token"]}
+            "/api/auth/logout", json={"refresh_token": pair["refresh_token"]}
         ).status_code
         == 204
     )
-    after = client.post("/auth/refresh", json={"refresh_token": pair["refresh_token"]})
+    after = client.post(
+        "/api/auth/refresh", json={"refresh_token": pair["refresh_token"]}
+    )
     assert after.status_code == 401
 
 
@@ -215,10 +219,10 @@ def test_protected_route_requires_valid_jwt(client: TestClient) -> None:
     gh_settings = Settings(auth_mode="github", jwt_signing_key="prod-key")
     app.dependency_overrides[get_settings] = lambda: gh_settings
 
-    assert client.post("/pastes", json={"content": "x"}).status_code == 401
+    assert client.post("/api/pastes", json={"content": "x"}).status_code == 401
     assert (
         client.post(
-            "/pastes",
+            "/api/pastes",
             json={"content": "x"},
             headers={"Authorization": "Bearer garbage"},
         ).status_code
@@ -227,7 +231,7 @@ def test_protected_route_requires_valid_jwt(client: TestClient) -> None:
 
     token = create_access_token("user-1", gh_settings)
     ok = client.post(
-        "/pastes",
+        "/api/pastes",
         json={"content": "mine"},
         headers={"Authorization": f"Bearer {token}"},
     )

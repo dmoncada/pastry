@@ -19,6 +19,39 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   signing_protocol                  = "sigv4"
 }
 
+# Rewrite browser navigations to the SPA entrypoint before S3 is consulted. Unlike a
+# distribution-wide 404 fallback, this leaves API and raw-text misses as actual 404s.
+resource "aws_cloudfront_function" "spa_rewrite" {
+  name    = "${local.name}-spa-rewrite"
+  runtime = "cloudfront-js-1.0"
+  comment = "Serve the SPA for browser deep links without masking API responses"
+  publish = true
+  code    = <<-JS
+    function handler(event) {
+      var request = event.request;
+      var uri = request.uri;
+      var accept = request.headers.accept && request.headers.accept.value || "";
+
+      // Ordered API/raw behaviours bypass this function, but retain this guard for
+      // exact namespace roots handled by the default behaviour.
+      if (uri === "/api" || uri.indexOf("/api/") === 0 ||
+          uri === "/raw" || uri.indexOf("/raw/") === 0) {
+        return request;
+      }
+
+      // Files (including Vite's /assets/* output) are always served directly.
+      if (uri.indexOf(".") !== -1 || uri.indexOf("/assets/") === 0) {
+        return request;
+      }
+
+      if (accept.indexOf("text/html") !== -1) {
+        request.uri = "/index.html";
+      }
+      return request;
+    }
+  JS
+}
+
 resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
   default_root_object = "index.html"
@@ -52,6 +85,11 @@ resource "aws_cloudfront_distribution" "frontend" {
     cached_methods         = ["GET", "HEAD"]
     # AWS managed "CachingOptimized" policy.
     cache_policy_id = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.spa_rewrite.arn
+    }
   }
 
   # Route the API under /api to API Gateway. The app serves these paths itself (see main.py),
@@ -68,15 +106,15 @@ resource "aws_cloudfront_distribution" "frontend" {
     origin_request_policy_id = "b689b0a8-53d0-40ab-baf2-68738e2966ac" # Managed-AllViewerExceptHostHeader
   }
 
-  # SPA fallback: client-side routes (e.g. /p/<slug>) resolve to index.html.
-  dynamic "custom_error_response" {
-    for_each = toset([403, 404])
-    content {
-      error_code            = custom_error_response.value
-      response_code         = 200
-      response_page_path    = "/index.html"
-      error_caching_min_ttl = 10
-    }
+  # Raw public text is a separate, non-cached API Gateway behavior.
+  ordered_cache_behavior {
+    path_pattern             = "/raw/*"
+    target_origin_id         = "api-gateway"
+    viewer_protocol_policy   = "redirect-to-https"
+    allowed_methods          = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    cached_methods           = ["GET", "HEAD"]
+    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # Managed-CachingDisabled
+    origin_request_policy_id = "b689b0a8-53d0-40ab-baf2-68738e2966ac" # Managed-AllViewerExceptHostHeader
   }
 
   restrictions {

@@ -89,18 +89,24 @@ class ApiClient:
         return _parse(PASTE_LIST, self._request("GET", "/pastes"))
 
     def get(self, slug: str) -> Paste:
-        return _parse(Paste, self._request("GET", f"/p/{slug}"))
+        return _parse(Paste, self._request("GET", f"/pastes/{slug}"))
 
     def get_raw(self, slug: str) -> str:
-        return self._request("GET", f"/p/{slug}/raw").text
+        # The configured endpoint ends in /api, but raw content intentionally lives at
+        # the frontend origin's sibling /raw namespace.
+        api_url = str(self._client.base_url).rstrip("/")
+        raw_url = f"{api_url.removesuffix('/api')}/raw/{slug}"
+        return self._request("GET", raw_url).text
 
     def edit(self, slug: str, content: str) -> Paste:
         body = PasteUpdate(content=content)
-        resp = self._request("PATCH", f"/p/{slug}", json=body.model_dump(mode="json"))
+        resp = self._request(
+            "PATCH", f"/pastes/{slug}", json=body.model_dump(mode="json")
+        )
         return _parse(Paste, resp)
 
     def delete(self, slug: str) -> None:
-        self._request("DELETE", f"/p/{slug}")
+        self._request("DELETE", f"/pastes/{slug}")
 
     def close(self) -> None:
         self._client.close()

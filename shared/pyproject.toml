@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Shared pydantic models and id helpers for Pastry (backend + cli)"
 requires-python = ">=3.12"
 dependencies = [
+    "base32-crockford>=0.3.0",
     "pydantic>=2",
+    "svix-ksuid>=0.7.0",
 ]
 
 [build-system]

@@ -1,6 +1,6 @@
 // API client. Attaches the in-memory access token, transparently refreshes once on a 401
 // using the HttpOnly refresh cookie, and surfaces failures as ApiError. Public reads
-// (/p/<slug>) work without a token. Every request sends credentials so the same-origin
+// (/pastes/<slug>) work without a token. Every request sends credentials so the same-origin
 // refresh cookie rides along.
 
 import { clearAccessToken, getAccessToken, markAuthResolved, setAccessToken } from "@/auth";
@@ -110,13 +110,13 @@ export const api = {
       body: JSON.stringify({ content, expires_in: expiresIn || null }),
     }),
 
-  getPaste: (slug: string) => json<Paste>(`/p/${slug}`),
+  getPaste: (slug: string) => json<Paste>(`/pastes/${slug}`),
 
   updatePaste: (slug: string, content: string) =>
-    json<Paste>(`/p/${slug}`, { method: "PATCH", body: JSON.stringify({ content }) }),
+    json<Paste>(`/pastes/${slug}`, { method: "PATCH", body: JSON.stringify({ content }) }),
 
   deletePaste: async (slug: string): Promise<void> => {
-    const resp = await request(`/p/${slug}`, { method: "DELETE" });
+    const resp = await request(`/pastes/${slug}`, { method: "DELETE" });
     if (!resp.ok && resp.status !== 204) throw new ApiError(await errorMessage(resp), resp.status);
   },
 };

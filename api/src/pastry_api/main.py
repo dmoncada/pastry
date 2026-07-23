@@ -22,17 +22,14 @@ app.add_middleware(
     allow_credentials=False,
 )
 
-# Mount the same handlers at both the root and under /api. The CLI (and API-Gateway-direct
-# traffic) uses the root paths with the refresh token in the request body; the browser uses
-# /api via CloudFront so the refresh cookie is first-party. /api also disambiguates the read
-# API from the SPA route of the same shape — /p/<slug> serves the app, /api/p/<slug> the JSON.
-app.include_router(pastes.router)
-app.include_router(auth.router)
+# All JSON and authentication operations are canonical under /api. The refresh cookie is
+# deliberately scoped to /api/auth, while raw content has its own public /raw namespace.
 app.include_router(pastes.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
+app.include_router(pastes.raw_router)
 
 
-@app.get("/healthz")
+@app.get("/api/healthz")
 def healthz() -> dict[str, str]:
     """Liveness probe."""
     return {"status": "ok"}

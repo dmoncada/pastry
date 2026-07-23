@@ -95,6 +95,13 @@ def test_create_from_arg_prints_slug(fake: FakeClient, runner: CliRunner) -> Non
     assert fake.created == ("hello", None)
 
 
+def test_share_url_drops_terminal_api_path() -> None:
+    assert (
+        cli._share_url("http://localhost:5173/api", "NEWSLUG")
+        == "http://localhost:5173/NEWSLUG"
+    )
+
+
 def test_create_from_stdin(fake: FakeClient, runner: CliRunner) -> None:
     result = runner.invoke(cli.main, ["create"], input="piped body")
     assert result.exit_code == 0

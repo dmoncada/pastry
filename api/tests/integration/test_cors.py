@@ -10,7 +10,7 @@ pytestmark = pytest.mark.integration
 
 def test_cors_preflight_allows_web_origin(client: TestClient) -> None:
     resp = client.options(
-        "/pastes",
+        "/api/pastes",
         headers={
             "Origin": "http://localhost:5173",
             "Access-Control-Request-Method": "POST",
@@ -21,7 +21,7 @@ def test_cors_preflight_allows_web_origin(client: TestClient) -> None:
 
 def test_cors_rejects_unknown_origin(client: TestClient) -> None:
     resp = client.options(
-        "/pastes",
+        "/api/pastes",
         headers={
             "Origin": "https://evil.example.com",
             "Access-Control-Request-Method": "POST",

@@ -28,8 +28,8 @@ from pastry_api.security import InvalidToken
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 # The web client's refresh token lives in this cookie. Path-scoped to the auth endpoints so
-# it is never sent on ordinary /api/pastes calls. Path matches the /api mount the browser
-# uses (see main.py); the CLI hits the root paths and uses the request body instead.
+# it is never sent on ordinary /api/pastes calls. Both browser and CLI use the /api mount;
+# the CLI carries the refresh token in its request body instead of a cookie.
 REFRESH_COOKIE_NAME = "pastry_refresh"
 REFRESH_COOKIE_PATH = "/api/auth"
 

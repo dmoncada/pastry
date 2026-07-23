@@ -3,8 +3,13 @@ output "table_name" {
 }
 
 output "api_url" {
-  description = "Invoke URL for the HTTP API (direct origin; the web app reaches it same-origin via CloudFront /api). Useful for the CLI and health checks."
+  description = "Direct HTTP API Gateway invoke URL, for diagnostic and integration use. It does not host the paste viewer."
   value       = aws_apigatewayv2_api.http.api_endpoint
+}
+
+output "frontend_api_url" {
+  description = "Canonical frontend-domain API endpoint for the CLI and browser clients."
+  value       = "${local.frontend_url}/api"
 }
 
 output "frontend_bucket" {

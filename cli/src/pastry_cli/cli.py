@@ -52,6 +52,12 @@ def _client(config: Config) -> ApiClient:
     return ApiClient(config, access_token=session.resolve_access_token(config))
 
 
+def _share_url(api_url: str, slug: str) -> str:
+    """Map a canonical frontend ``/api`` endpoint to its viewer URL."""
+    endpoint = api_url.rstrip("/")
+    return f"{endpoint.removesuffix('/api')}/{slug}"
+
+
 def handle_api_errors[**P, T](fn: Callable[P, T]) -> Callable[P, T]:
     """Turn an :class:`ApiError` into a clean stderr message + non-zero exit."""
 
@@ -130,28 +136,18 @@ def create(config: Config, text: str | None, expire: str | None) -> None:
     slug = paste.slug
     click.echo(slug)  # stdout: the data (pipeable)
     if sys.stdout.isatty():
-        share_url = f"{config.api_url.rstrip('/')}/p/{slug}"
-        click.echo(f"→ {share_url}", err=True)
+        click.echo(f"→ {_share_url(config.api_url, slug)}", err=True)
 
 
 @main.command()
 @click.argument("id")
-@click.option("--no-copy", is_flag=True, help="Don't copy to clipboard on a TTY.")
 @click.pass_obj
 @handle_api_errors
-def get(config: Config, id: str, no_copy: bool) -> None:
-    """Print a paste by slug to stdout (pipeable); copies to clipboard when interactive."""
+def get(config: Config, id: str) -> None:
+    """Print a paste by slug to stdout (pipeable)."""
     with _client(config) as api:
         content = api.get_raw(id)
     sys.stdout.write(content)  # faithful: no extra newline
-    if sys.stdout.isatty() and not no_copy:
-        try:
-            import pyperclip
-
-            pyperclip.copy(content)
-            click.echo("\n(copied to clipboard)", err=True)
-        except Exception:
-            pass  # clipboard unavailable (e.g. headless) — not fatal
 
 
 @main.command()

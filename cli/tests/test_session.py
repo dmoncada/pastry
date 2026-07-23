@@ -25,7 +25,7 @@ class FakeResponse:
 
 
 def _config() -> Config:
-    return Config(api_url="http://localhost:8080", token=None)
+    return Config(api_url="http://localhost:5173/api", token=None)
 
 
 def test_env_token_wins_without_network(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -33,7 +33,7 @@ def test_env_token_wins_without_network(monkeypatch: pytest.MonkeyPatch) -> None
         raise AssertionError("should not hit the network")
 
     monkeypatch.setattr(session.httpx, "post", boom)
-    cfg = Config(api_url="http://localhost:8080", token="env-token")
+    cfg = Config(api_url="http://localhost:5173/api", token="env-token")
     assert session.resolve_access_token(cfg) == "env-token"
 
 

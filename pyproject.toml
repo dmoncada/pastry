@@ -17,7 +17,7 @@ default-groups = ["dev", "workspace"]
 members = [
     "api",
     "cli",
-    "shared"
+    "shared",
 ]
 
 [tool.uv.sources]

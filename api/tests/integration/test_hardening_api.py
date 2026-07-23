@@ -18,18 +18,20 @@ pytestmark = pytest.mark.integration
 
 def test_oversized_paste_is_rejected_with_422(client: TestClient) -> None:
     """Previously reached put_item and raised a botocore ClientError -> 500."""
-    resp = client.post("/pastes", json={"content": "x" * (MAX_CONTENT_BYTES + 1)})
+    resp = client.post("/api/pastes", json={"content": "x" * (MAX_CONTENT_BYTES + 1)})
     assert resp.status_code == 422
 
 
 def test_paste_at_the_limit_is_accepted(client: TestClient) -> None:
-    resp = client.post("/pastes", json={"content": "x" * MAX_CONTENT_BYTES})
+    resp = client.post("/api/pastes", json={"content": "x" * MAX_CONTENT_BYTES})
     assert resp.status_code == 201
 
 
 def test_oversized_edit_is_rejected(client: TestClient) -> None:
-    slug = client.post("/pastes", json={"content": "seed"}).json()["slug"]
-    resp = client.patch(f"/p/{slug}", json={"content": "x" * (MAX_CONTENT_BYTES + 1)})
+    slug = client.post("/api/pastes", json={"content": "seed"}).json()["slug"]
+    resp = client.patch(
+        f"/api/pastes/{slug}", json={"content": "x" * (MAX_CONTENT_BYTES + 1)}
+    )
     assert resp.status_code == 422
 
 
@@ -44,11 +46,12 @@ def test_openapi_declares_the_bearer_scheme(client: TestClient) -> None:
 
 def test_protected_routes_carry_a_security_requirement(client: TestClient) -> None:
     schema = client.get("/openapi.json").json()
-    assert schema["paths"]["/pastes"]["get"]["security"]
-    assert schema["paths"]["/pastes"]["post"]["security"]
+    assert schema["paths"]["/api/pastes"]["get"]["security"]
+    assert schema["paths"]["/api/pastes"]["post"]["security"]
 
 
 def test_public_read_stays_unauthenticated(client: TestClient) -> None:
     """The unlisted-link model depends on slug reads requiring no credentials."""
     schema = client.get("/openapi.json").json()
-    assert "security" not in schema["paths"]["/p/{slug}"]["get"]
+    assert "security" not in schema["paths"]["/api/pastes/{slug}"]["get"]
+    assert "security" not in schema["paths"]["/raw/{slug}"]["get"]

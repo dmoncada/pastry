@@ -18,7 +18,7 @@ def _isolated_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_default_when_nothing_set() -> None:
-    assert Config.resolve().api_url == "http://localhost:8080"
+    assert Config.resolve().api_url == "http://localhost:5173/api"
 
 
 def test_env_overrides_default(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -64,4 +64,4 @@ def test_malformed_config_file_falls_back_to_default() -> None:
     cfg_path = config.config_dir() / "config.toml"
     cfg_path.parent.mkdir(parents=True, exist_ok=True)
     cfg_path.write_text("this is not = valid = toml ===")
-    assert Config.resolve().api_url == "http://localhost:8080"
+    assert Config.resolve().api_url == "http://localhost:5173/api"

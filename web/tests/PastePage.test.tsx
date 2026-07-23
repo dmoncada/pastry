@@ -14,11 +14,11 @@ const mockApi = vi.mocked(api);
 function renderAt(slug: string) {
   return render(
     <MemoryRouter
-      initialEntries={[`/p/${slug}`]}
+      initialEntries={[`/${slug}`]}
       future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
     >
       <Routes>
-        <Route path="/p/:slug" element={<PastePage />} />
+        <Route path="/:slug" element={<PastePage />} />
       </Routes>
     </MemoryRouter>,
   );

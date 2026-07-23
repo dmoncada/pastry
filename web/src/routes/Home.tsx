@@ -100,7 +100,7 @@ export function Home(): JSX.Element {
   const copyLink = async (slug: string) => {
     try {
       // Throws on insecure origins, where `clipboard` is undefined entirely.
-      await navigator.clipboard.writeText(`${window.location.origin}/p/${slug}`);
+      await navigator.clipboard.writeText(`${window.location.origin}/${slug}`);
       setCopiedSlug(slug);
     } catch {
       setError("Could not copy to the clipboard.");
@@ -218,7 +218,7 @@ export function Home(): JSX.Element {
           <ul className="pastes">
             {pastes.map((p) => (
               <li key={p.slug}>
-                <Link className="slug" to={`/p/${p.slug}`}>
+                <Link className="slug" to={`/${p.slug}`}>
                   {p.slug}
                 </Link>
                 <span className="preview">{p.content.split("\n")[0].slice(0, 60) || "—"}</span>

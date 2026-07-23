@@ -13,6 +13,7 @@ from pastry_api import repository
 from pastry_api.deps import CurrentUserId
 
 router = APIRouter(tags=["pastes"])
+raw_router = APIRouter(tags=["pastes"])
 
 
 @router.post("/pastes", status_code=status.HTTP_201_CREATED)
@@ -30,7 +31,7 @@ def list_pastes(user_id: CurrentUserId) -> list[Paste]:
     return repository.list_pastes(user_id)
 
 
-@router.get("/p/{slug}")
+@router.get("/pastes/{slug}")
 def get_paste(slug: str) -> Paste:
     """Public read by slug. No auth. 404 if missing/expired/deleted."""
     try:
@@ -39,7 +40,7 @@ def get_paste(slug: str) -> Paste:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "paste not found") from exc
 
 
-@router.get("/p/{slug}/raw", response_class=Response)
+@raw_router.get("/raw/{slug}", response_class=Response)
 def get_paste_raw(slug: str) -> Response:
     """Public raw read for the CLI: paste content as text/plain, pipeable."""
     try:
@@ -49,7 +50,7 @@ def get_paste_raw(slug: str) -> Response:
     return Response(content=paste.content, media_type="text/plain; charset=utf-8")
 
 
-@router.patch("/p/{slug}")
+@router.patch("/pastes/{slug}")
 def edit_paste(slug: str, body: PasteUpdate, user_id: CurrentUserId) -> Paste:
     """Edit a paste's content. Owner only (403 otherwise)."""
     try:
@@ -60,7 +61,7 @@ def edit_paste(slug: str, body: PasteUpdate, user_id: CurrentUserId) -> Paste:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not your paste") from exc
 
 
-@router.delete("/p/{slug}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/pastes/{slug}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_paste(slug: str, user_id: CurrentUserId) -> None:
     """Delete a paste. Owner only (403 otherwise)."""
     try:

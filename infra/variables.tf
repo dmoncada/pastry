@@ -19,8 +19,8 @@ variable "domain_name" {
   default = ""
 }
 
-# ACM certificate ARN for domain_name. MUST be in us-east-1 (CloudFront requirement).
-variable "acm_certificate_arn" {
+# Cloudflare zone that authoritatively hosts domain_name's DNS records.
+variable "cloudflare_zone_name" {
   type    = string
   default = ""
 }

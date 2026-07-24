@@ -11,6 +11,10 @@ terraform {
       # argument yet — so there is no working replacement. Revisit v6 once it lands.
       version = "~> 5.0"
     }
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 5.0"
+    }
   }
 
   backend "s3" {
@@ -31,3 +35,7 @@ provider "aws" {
   alias  = "us_east_1"
   region = "us-east-1"
 }
+
+# The provider reads CLOUDFLARE_API_TOKEN from its environment. CI supplies that
+# value from a GitHub Actions secret, so the credential is never stored in state.
+provider "cloudflare" {}

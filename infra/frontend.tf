@@ -125,10 +125,14 @@ resource "aws_cloudfront_distribution" "frontend" {
 
   viewer_certificate {
     cloudfront_default_certificate = local.use_domain ? null : true
-    acm_certificate_arn            = local.use_domain ? var.acm_certificate_arn : null
+    acm_certificate_arn            = local.use_domain ? aws_acm_certificate.frontend[0].arn : null
     ssl_support_method             = local.use_domain ? "sni-only" : null
     minimum_protocol_version       = local.use_domain ? "TLSv1.2_2021" : null
   }
+
+  # Attaching an unissued certificate fails; wait until its Cloudflare DNS
+  # validation record has made it available in ACM.
+  depends_on = [aws_acm_certificate_validation.frontend]
 }
 
 # Allow only this CloudFront distribution (via OAC) to read the bucket.

@@ -49,7 +49,8 @@ def rotate_refresh(raw: str, settings: Settings) -> TokenPair:
     if datetime.fromisoformat(item["expires_at"]) <= _now():
         auth_repo.delete_refresh(github_id, jti)
         raise InvalidToken("refresh token expired")
-    auth_repo.delete_refresh(github_id, jti)  # single-use
+    if not auth_repo.consume_refresh(github_id, jti, hash_token(raw)):
+        raise InvalidToken("unknown refresh token")
     return issue_tokens(github_id, settings)
 
 

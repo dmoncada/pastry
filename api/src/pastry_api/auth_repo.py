@@ -10,6 +10,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, cast
 
+from boto3.dynamodb.conditions import Attr
+from botocore.exceptions import ClientError
 from pastry_shared.models import User
 
 from pastry_api.db import get_table, user_pk
@@ -71,6 +73,24 @@ def store_refresh(
 def get_refresh(github_id: str, jti: str) -> Item | None:
     resp = get_table().get_item(Key={"PK": user_pk(github_id), "SK": _refresh_sk(jti)})
     return resp.get("Item")
+
+
+def consume_refresh(github_id: str, jti: str, token_hash: str) -> bool:
+    """Atomically delete a refresh token only when its hash still matches.
+
+    The conditional delete is the single-use boundary: concurrent requests that both
+    read a valid token may race here, but exactly one can consume it.
+    """
+    try:
+        get_table().delete_item(
+            Key={"PK": user_pk(github_id), "SK": _refresh_sk(jti)},
+            ConditionExpression=Attr("token_hash").eq(token_hash),
+        )
+    except ClientError as exc:
+        if exc.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            return False
+        raise
+    return True
 
 
 def delete_refresh(github_id: str, jti: str) -> None:

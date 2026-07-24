@@ -8,6 +8,8 @@ token-crypto unit tests live in unit/test_auth_tokens.py."""
 from __future__ import annotations
 
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from typing import Any
 
 import pytest
@@ -82,6 +84,34 @@ def test_rotate_invalidates_old_refresh(table: None) -> None:
     # the original (rotated-away) token is now dead
     with pytest.raises(InvalidToken):
         auth_service.rotate_refresh(pair.refresh_token, settings)
+
+
+def test_concurrent_refresh_consumes_token_once(
+    table: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = Settings(jwt_signing_key="k")
+    pair = auth_service.issue_tokens("42", settings)
+    _get_refresh = auth_repo.get_refresh
+    barrier = Barrier(2)
+
+    def sync_get_refresh(github_id: str, jti: str) -> auth_repo.Item | None:
+        item = _get_refresh(github_id, jti)
+        barrier.wait()
+        return item
+
+    monkeypatch.setattr(auth_repo, "get_refresh", sync_get_refresh)
+
+    def rotate() -> bool:
+        try:
+            auth_service.rotate_refresh(pair.refresh_token, settings)
+        except InvalidToken:
+            return False
+        return True
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = list(executor.map(lambda _: rotate(), range(2)))
+
+    assert sorted(outcomes) == [False, True]
 
 
 def test_rotate_rejects_tampered_token(table: None) -> None:

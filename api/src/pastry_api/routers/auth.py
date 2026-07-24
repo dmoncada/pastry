@@ -32,6 +32,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 # the CLI carries the refresh token in its request body instead of a cookie.
 REFRESH_COOKIE_NAME = "pastry_refresh"
 REFRESH_COOKIE_PATH = "/api/auth"
+OAUTH_STATE_COOKIE_NAME = "pastry_oauth_state"
+OAUTH_STATE_COOKIE_PATH = "/api/auth/github/callback"
+OAUTH_STATE_TTL = 600
 
 
 def _set_refresh_cookie(response: Response, raw: str, settings: Settings) -> None:
@@ -48,6 +51,29 @@ def _set_refresh_cookie(response: Response, raw: str, settings: Settings) -> Non
 
 def _clear_refresh_cookie(response: Response) -> None:
     response.delete_cookie(key=REFRESH_COOKIE_NAME, path=REFRESH_COOKIE_PATH)
+
+
+def _set_oauth_state_cookie(response: Response, state: str, settings: Settings) -> None:
+    """Bind a short-lived OAuth state value to the browser that started login."""
+    response.set_cookie(
+        key=OAUTH_STATE_COOKIE_NAME,
+        value=state,
+        max_age=OAUTH_STATE_TTL,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite=settings.cookie_samesite,
+        path=OAUTH_STATE_COOKIE_PATH,
+    )
+
+
+def _clear_oauth_state_cookie(response: Response, settings: Settings) -> None:
+    response.delete_cookie(
+        key=OAUTH_STATE_COOKIE_NAME,
+        path=OAUTH_STATE_COOKIE_PATH,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite=settings.cookie_samesite,
+    )
 
 
 def _access_only(pair: TokenPair) -> AccessTokenResponse:
@@ -87,22 +113,42 @@ def _authenticate(profile: dict[str, object], settings: Settings) -> TokenPair:
 
 
 @router.get("/github/login")
-def github_login(github: GitHub) -> dict[str, str]:
+def github_login(
+    github: GitHub, settings: Config, response: Response
+) -> dict[str, str]:
     """Web: begin the GitHub authorization-code flow (returns the redirect URL + state)."""
     state = secrets.token_urlsafe(16)
+    _set_oauth_state_cookie(response, state, settings)
     return {"authorize_url": github.build_authorize_url(state), "state": state}
 
 
 @router.get("/github/callback", response_model=AccessTokenResponse)
 def github_callback(
-    code: str, state: str, github: GitHub, settings: Config, response: Response
+    code: str,
+    state: str,
+    request: Request,
+    github: GitHub,
+    settings: Config,
+    response: Response,
 ) -> AccessTokenResponse:
-    """Web: exchange the auth code, verify identity, set the refresh cookie, return access."""
+    """Validate browser-bound state, exchange the code, and issue web tokens."""
+    expected_state = request.cookies.get(OAUTH_STATE_COOKIE_NAME)
+    _clear_oauth_state_cookie(response, settings)
+    if expected_state is None or not secrets.compare_digest(expected_state, state):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "invalid OAuth state",
+            headers={"Set-Cookie": response.headers["set-cookie"]},
+        )
     try:
         gh_token = github.exchange_code(code)
         profile = github.fetch_user(gh_token)
     except GitHubError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            str(exc),
+            headers={"Set-Cookie": response.headers["set-cookie"]},
+        ) from exc
     pair = _authenticate(profile, settings)
     _set_refresh_cookie(response, pair.refresh_token, settings)
     return _access_only(pair)

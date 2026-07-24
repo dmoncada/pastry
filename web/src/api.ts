@@ -124,7 +124,8 @@ export const api = {
 // --- OAuth (GitHub authorization-code flow) ---
 
 export async function beginLogin(): Promise<void> {
-  const resp = await fetch(`${API_URL}/auth/github/login`);
+  // The API binds the state to this browser in an HttpOnly cookie before redirecting.
+  const resp = await fetch(`${API_URL}/auth/github/login`, { credentials: "include" });
   if (!resp.ok) throw new ApiError(await errorMessage(resp), resp.status);
   const { authorize_url, state } = (await resp.json()) as { authorize_url: string; state: string };
   sessionStorage.setItem(STATE_KEY, state);

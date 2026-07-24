@@ -29,6 +29,7 @@ class FakeGitHub:
 
     def __init__(self) -> None:
         self.pending = False
+        self.exchange_calls = 0
         self.profile: dict[str, Any] = {
             "id": 12345,
             "login": "octocat",
@@ -39,6 +40,7 @@ class FakeGitHub:
         return f"https://github.com/login/oauth/authorize?state={state}"
 
     def exchange_code(self, code: str) -> str:
+        self.exchange_calls += 1
         if code == "bad":
             raise GitHubError("bad verification code")
         return "gh-access-token"
@@ -153,14 +155,76 @@ def test_device_flow_pending_returns_428(
 
 
 def test_github_callback_success(client: TestClient, github: FakeGitHub) -> None:
-    resp = client.get("/api/auth/github/callback", params={"code": "ok", "state": "s"})
+    login = client.get("/api/auth/github/login")
+    state = login.json()["state"]
+    resp = client.get(
+        "/api/auth/github/callback", params={"code": "ok", "state": state}
+    )
     assert resp.status_code == 200
     assert decode_access_token(resp.json()["access_token"], get_settings()) == "12345"
+    assert github.exchange_calls == 1
+
+
+def test_github_login_sets_short_lived_http_only_state_cookie(
+    client: TestClient, github: FakeGitHub
+) -> None:
+    resp = client.get("/api/auth/github/login")
+
+    assert resp.status_code == 200
+    set_cookie = resp.headers["set-cookie"]
+    assert "pastry_oauth_state=" in set_cookie
+    assert "HttpOnly" in set_cookie
+    assert "Max-Age=600" in set_cookie
+    assert "Path=/api/auth/github/callback" in set_cookie
+
+
+def test_github_callback_rejects_missing_state_cookie(
+    client: TestClient, github: FakeGitHub
+) -> None:
+    resp = client.get("/api/auth/github/callback", params={"code": "ok", "state": "s"})
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "invalid OAuth state"
+    assert github.exchange_calls == 0
+    assert "pastry_oauth_state=" in resp.headers["set-cookie"]
+
+
+def test_github_callback_rejects_mismatched_state(
+    client: TestClient, github: FakeGitHub
+) -> None:
+    client.get("/api/auth/github/login")
+    resp = client.get(
+        "/api/auth/github/callback", params={"code": "ok", "state": "wrong"}
+    )
+
+    assert resp.status_code == 400
+    assert github.exchange_calls == 0
+    assert "pastry_oauth_state=" in resp.headers["set-cookie"]
+
+
+def test_github_callback_state_is_single_use(
+    client: TestClient, github: FakeGitHub
+) -> None:
+    state = client.get("/api/auth/github/login").json()["state"]
+    first = client.get(
+        "/api/auth/github/callback", params={"code": "ok", "state": state}
+    )
+    replay = client.get(
+        "/api/auth/github/callback", params={"code": "ok", "state": state}
+    )
+
+    assert first.status_code == 200
+    assert replay.status_code == 400
+    assert github.exchange_calls == 1
 
 
 def test_github_callback_bad_code_400(client: TestClient, github: FakeGitHub) -> None:
-    resp = client.get("/api/auth/github/callback", params={"code": "bad", "state": "s"})
+    state = client.get("/api/auth/github/login").json()["state"]
+    resp = client.get(
+        "/api/auth/github/callback", params={"code": "bad", "state": state}
+    )
     assert resp.status_code == 400
+    assert "pastry_oauth_state=" in resp.headers["set-cookie"]
 
 
 def test_refresh_endpoint_rotates(client: TestClient, github: FakeGitHub) -> None:
@@ -197,7 +261,10 @@ def test_logout_revokes_refresh(client: TestClient, github: FakeGitHub) -> None:
 def test_callback_sets_refresh_cookie_and_hides_it_from_body(
     client: TestClient, github: FakeGitHub
 ) -> None:
-    resp = client.get("/api/auth/github/callback", params={"code": "ok", "state": "s"})
+    state = client.get("/api/auth/github/login").json()["state"]
+    resp = client.get(
+        "/api/auth/github/callback", params={"code": "ok", "state": state}
+    )
     assert resp.status_code == 200
     body = resp.json()
     assert "access_token" in body
@@ -212,7 +279,8 @@ def test_refresh_via_cookie_rotates_and_omits_refresh_from_body(
     client: TestClient, github: FakeGitHub
 ) -> None:
     # Sign in via the callback so the client's cookie jar holds the refresh cookie.
-    client.get("/api/auth/github/callback", params={"code": "ok", "state": "s"})
+    state = client.get("/api/auth/github/login").json()["state"]
+    client.get("/api/auth/github/callback", params={"code": "ok", "state": state})
 
     rotated = client.post("/api/auth/refresh")  # no body: refresh comes from the cookie
     assert rotated.status_code == 200
@@ -223,7 +291,8 @@ def test_refresh_via_cookie_rotates_and_omits_refresh_from_body(
 def test_logout_via_cookie_clears_cookie_and_revokes(
     client: TestClient, github: FakeGitHub
 ) -> None:
-    client.get("/api/auth/github/callback", params={"code": "ok", "state": "s"})
+    state = client.get("/api/auth/github/login").json()["state"]
+    client.get("/api/auth/github/callback", params={"code": "ok", "state": state})
 
     resp = client.post("/api/auth/logout")  # no body: cookie transport
     assert resp.status_code == 204
